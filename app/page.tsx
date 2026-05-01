@@ -9,13 +9,36 @@ export default function Home() {
   const [showModal, setShowModal] = useState(false);
   const [input, setInput] = useState("");
 
+  const [showAlert, setShowAlert] = useState(false);
+  const [alertMsg, setAlertMsg] = useState("");
+
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetReason, setResetReason] = useState("");
+  const [resetUsed, setResetUsed] = useState(false);
+
   const historyRef = useRef<HTMLDivElement>(null);
 
+  /* 🌙 Auto +1 every 30s */
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCount((c) => c + 1);
+      setHistory((h) => ["🌙 +1 — Didn't hug today", ...h]);
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  /* Scroll to top */
   useEffect(() => {
     if (historyRef.current) {
-      historyRef.current.scrollTop = 0; // always stay at top
+      historyRef.current.scrollTop = 0;
     }
   }, [history]);
+
+  const showCustomAlert = (msg: string) => {
+    setAlertMsg(msg);
+    setShowAlert(true);
+  };
 
   const addHug = () => {
     setCount((c) => c + 1);
@@ -25,14 +48,17 @@ export default function Home() {
 
   const openRemove = () => {
     if (count === 0) {
-      alert("Debt can't go below 0 😌");
+      showCustomAlert("Nice try 😌\nDebt can't go below 0.");
       return;
     }
     setShowModal(true);
   };
 
   const confirmRemove = () => {
-    if (!input.trim()) return;
+    if (!input.trim()) {
+      showCustomAlert("Reason is required 👑");
+      return;
+    }
 
     setCount((c) => c - 1);
     setReason(input);
@@ -40,6 +66,37 @@ export default function Home() {
 
     setInput("");
     setShowModal(false);
+  };
+
+  /* 💣 Reset logic */
+  const openReset = () => {
+    if (resetUsed) {
+      showCustomAlert("Reset can be used only once per day 👑");
+      return;
+    }
+    setShowResetModal(true);
+  };
+
+  const confirmReset = () => {
+    if (!resetReason.trim()) {
+      showCustomAlert("Reset reason is required 💣");
+      return;
+    }
+
+    setCount(0);
+    setReason(resetReason.trim());
+    setHistory((h) => [`💣 Reset — ${resetReason.trim()}`, ...h]);
+
+    setResetUsed(true);
+    setResetReason("");
+    setShowResetModal(false);
+  };
+
+  /* 🚨 Warning */
+  const getWarning = () => {
+    if (count >= 20) return "🚨 Emergency hug delivery required";
+    if (count >= 10) return "⚠️ Danger zone";
+    return "😌 Safe... for now";
   };
 
   return (
@@ -50,6 +107,8 @@ export default function Home() {
 
         <div style={styles.counter}>{count} ❤️</div>
 
+        <p style={styles.warning}>{getWarning()}</p>
+
         <div style={styles.buttonRow}>
           <button style={styles.addBtn} onClick={addHug}>
             +1 I missed her
@@ -59,6 +118,17 @@ export default function Home() {
             -1 She reduced
           </button>
         </div>
+
+        <button
+          style={{
+            ...styles.resetBtn,
+            opacity: resetUsed ? 0.5 : 1,
+            cursor: resetUsed ? "not-allowed" : "pointer",
+          }}
+          onClick={openReset}
+        >
+          💣 Reset once today
+        </button>
 
         <p style={styles.reason}>
           {reason ? `“${reason}”` : "No unfair reason yet 👀"}
@@ -82,7 +152,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Modal */}
+      {/* Remove Modal */}
       {showModal && (
         <div style={styles.overlay}>
           <div style={styles.modal}>
@@ -103,6 +173,59 @@ export default function Home() {
                 Confirm
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Modal */}
+      {showResetModal && (
+        <div style={styles.overlay}>
+          <div style={styles.modal}>
+            <h3>Reset everything? 💣</h3>
+            <p style={styles.modalText}>
+              Reason is required because this is unfair.
+            </p>
+
+            <input
+              style={styles.input}
+              value={resetReason}
+              onChange={(e) => setResetReason(e.target.value)}
+              placeholder="Why reset today?"
+            />
+
+            <div style={styles.modalBtns}>
+              <button
+                style={styles.cancel}
+                onClick={() => {
+                  setResetReason("");
+                  setShowResetModal(false);
+                }}
+              >
+                Cancel
+              </button>
+
+              <button style={styles.resetConfirm} onClick={confirmReset}>
+                Reset
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Alert Modal */}
+      {showAlert && (
+        <div style={styles.overlay}>
+          <div style={styles.modal}>
+            <p style={{ marginBottom: "15px", whiteSpace: "pre-line" }}>
+              {alertMsg}
+            </p>
+
+            <button
+              style={styles.confirm}
+              onClick={() => setShowAlert(false)}
+            >
+              OK
+            </button>
           </div>
         </div>
       )}
@@ -148,6 +271,12 @@ const styles: any = {
     margin: "20px 0",
   },
 
+  warning: {
+    fontSize: "14px",
+    marginBottom: "10px",
+    color: "#444",
+  },
+
   buttonRow: {
     display: "flex",
     gap: "10px",
@@ -171,6 +300,17 @@ const styles: any = {
     padding: "10px 15px",
     borderRadius: "20px",
     cursor: "pointer",
+  },
+
+  resetBtn: {
+    marginTop: "12px",
+    background: "linear-gradient(135deg, #ef4444, #be123c)",
+    color: "white",
+    border: "none",
+    padding: "10px 16px",
+    borderRadius: "999px",
+    fontWeight: "bold",
+    boxShadow: "0 8px 18px rgba(239,68,68,0.25)",
   },
 
   reason: {
@@ -199,7 +339,6 @@ const styles: any = {
     display: "flex",
     flexDirection: "column",
     gap: "8px",
-    scrollBehavior: "smooth",
   },
 
   historyItem: {
@@ -234,6 +373,12 @@ const styles: any = {
     textAlign: "center",
   },
 
+  modalText: {
+    color: "#777",
+    fontSize: "13px",
+    marginTop: "6px",
+  },
+
   input: {
     width: "100%",
     padding: "8px",
@@ -258,6 +403,15 @@ const styles: any = {
 
   confirm: {
     background: "#f472b6",
+    color: "white",
+    border: "none",
+    padding: "8px 12px",
+    borderRadius: "8px",
+    cursor: "pointer",
+  },
+
+  resetConfirm: {
+    background: "#ef4444",
     color: "white",
     border: "none",
     padding: "8px 12px",
