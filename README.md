@@ -46,3 +46,4 @@ Fill `.env.local` with your Supabase project URL and anon key.
 
 The database uses Row Level Security. Only authenticated users can read/write, and the app additionally blocks emails outside the two configured users.
 # unfair
+# unfair
