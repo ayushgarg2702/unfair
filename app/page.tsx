@@ -1,6 +1,14 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { supabase } from "@/lib/supabase";
+
+type UnfairState = {
+  count: number;
+  reason: string;
+  history: string[];
+  reset_date: string | null;
+};
 
 export default function Home() {
   const [count, setCount] = useState(0);
@@ -16,19 +24,54 @@ export default function Home() {
   const [resetReason, setResetReason] = useState("");
   const [resetUsed, setResetUsed] = useState(false);
 
+  const [loading, setLoading] = useState(true);
+
   const historyRef = useRef<HTMLDivElement>(null);
 
-  /* 🌙 Auto +1 every 30s */
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCount((c) => c + 1);
-      setHistory((h) => ["🌙 +1 — Didn't hug today", ...h]);
-    }, 30000);
+  const today = new Date().toISOString().slice(0, 10);
 
-    return () => clearInterval(interval);
+  const saveState = async (newState: UnfairState) => {
+    const { error } = await supabase
+      .from("unfair_state")
+      .update({
+        count: newState.count,
+        reason: newState.reason,
+        history: newState.history,
+        reset_date: newState.reset_date,
+      })
+      .eq("id", 1);
+
+    if (error) {
+      console.error(error);
+      showCustomAlert("Database save failed. Check Supabase setup.");
+    }
+  };
+
+  const loadState = async () => {
+    const { data, error } = await supabase
+      .from("unfair_state")
+      .select("count, reason, history, reset_date")
+      .eq("id", 1)
+      .single();
+
+    if (error) {
+      console.error(error);
+      showCustomAlert("Could not load saved data from Supabase.");
+      setLoading(false);
+      return;
+    }
+
+    setCount(data.count ?? 0);
+    setReason(data.reason ?? "");
+    setHistory(Array.isArray(data.history) ? data.history : []);
+    setResetUsed(data.reset_date === today);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    loadState();
   }, []);
 
-  /* Scroll to top */
   useEffect(() => {
     if (historyRef.current) {
       historyRef.current.scrollTop = 0;
@@ -40,10 +83,21 @@ export default function Home() {
     setShowAlert(true);
   };
 
-  const addHug = () => {
-    setCount((c) => c + 1);
-    setReason("You missed her ❤️");
-    setHistory((h) => [`+1 — missed her`, ...h]);
+  const addHug = async () => {
+    const newCount = count + 1;
+    const newReason = "You missed her ❤️";
+    const newHistory = [`+1 — missed her`, ...history];
+
+    setCount(newCount);
+    setReason(newReason);
+    setHistory(newHistory);
+
+    await saveState({
+      count: newCount,
+      reason: newReason,
+      history: newHistory,
+      reset_date: resetUsed ? today : null,
+    });
   };
 
   const openRemove = () => {
@@ -54,21 +108,30 @@ export default function Home() {
     setShowModal(true);
   };
 
-  const confirmRemove = () => {
+  const confirmRemove = async () => {
     if (!input.trim()) {
       showCustomAlert("Reason is required 👑");
       return;
     }
 
-    setCount((c) => c - 1);
-    setReason(input);
-    setHistory((h) => [`-1 — ${input}`, ...h]);
+    const newCount = Math.max(0, count - 1);
+    const newReason = input.trim();
+    const newHistory = [`-1 — ${newReason}`, ...history];
 
+    setCount(newCount);
+    setReason(newReason);
+    setHistory(newHistory);
     setInput("");
     setShowModal(false);
+
+    await saveState({
+      count: newCount,
+      reason: newReason,
+      history: newHistory,
+      reset_date: resetUsed ? today : null,
+    });
   };
 
-  /* 💣 Reset logic */
   const openReset = () => {
     if (resetUsed) {
       showCustomAlert("Reset can be used only once per day 👑");
@@ -77,30 +140,49 @@ export default function Home() {
     setShowResetModal(true);
   };
 
-  const confirmReset = () => {
+  const confirmReset = async () => {
     if (!resetReason.trim()) {
       showCustomAlert("Reset reason is required 💣");
       return;
     }
 
-    setCount(0);
-    setReason(resetReason.trim());
-    setHistory((h) => [`💣 Reset — ${resetReason.trim()}`, ...h]);
+    const newReason = resetReason.trim();
+    const newHistory = [`💣 Reset — ${newReason}`, ...history];
 
+    setCount(0);
+    setReason(newReason);
+    setHistory(newHistory);
     setResetUsed(true);
     setResetReason("");
     setShowResetModal(false);
+
+    await saveState({
+      count: 0,
+      reason: newReason,
+      history: newHistory,
+      reset_date: today,
+    });
   };
 
-  /* 🚨 Warning */
   const getWarning = () => {
     if (count >= 20) return "🚨 Emergency hug delivery required";
     if (count >= 10) return "⚠️ Danger zone";
     return "😌 Safe... for now";
   };
 
+  if (loading) {
+    return (
+      <div style={styles.page}>
+        <div style={styles.card}>Loading unfair data...</div>
+      </div>
+    );
+  }
+
   return (
     <div style={styles.page}>
+      <div style={styles.bgCircle1}></div>
+      <div style={styles.bgCircle2}></div>
+
       <div style={styles.card}>
         <h1 style={styles.title}>Unfair Website</h1>
         <p style={styles.subtitle}>Because she is always right.</p>
@@ -135,7 +217,6 @@ export default function Home() {
         </p>
       </div>
 
-      {/* History */}
       <div style={styles.historyBox}>
         <h2 style={styles.historyTitle}>History</h2>
 
@@ -152,7 +233,6 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Remove Modal */}
       {showModal && (
         <div style={styles.overlay}>
           <div style={styles.modal}>
@@ -177,7 +257,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Reset Modal */}
       {showResetModal && (
         <div style={styles.overlay}>
           <div style={styles.modal}>
@@ -212,7 +291,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Alert Modal */}
       {showAlert && (
         <div style={styles.overlay}>
           <div style={styles.modal}>
@@ -220,10 +298,7 @@ export default function Home() {
               {alertMsg}
             </p>
 
-            <button
-              style={styles.confirm}
-              onClick={() => setShowAlert(false)}
-            >
+            <button style={styles.confirm} onClick={() => setShowAlert(false)}>
               OK
             </button>
           </div>
@@ -233,8 +308,6 @@ export default function Home() {
   );
 }
 
-/* ---------- STYLES ---------- */
-
 const styles: any = {
   page: {
     minHeight: "100vh",
@@ -242,9 +315,35 @@ const styles: any = {
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    background: "#fff1f2",
     padding: "20px",
     fontFamily: "Arial",
+    background: "linear-gradient(135deg, #ffe4e6, #fdf2f8, #f0f9ff)",
+    position: "relative",
+    overflow: "hidden",
+  },
+
+  bgCircle1: {
+    position: "absolute",
+    width: "300px",
+    height: "300px",
+    background: "#fbcfe8",
+    borderRadius: "50%",
+    top: "-100px",
+    left: "-100px",
+    filter: "blur(80px)",
+    opacity: 0.6,
+  },
+
+  bgCircle2: {
+    position: "absolute",
+    width: "300px",
+    height: "300px",
+    background: "#c7d2fe",
+    borderRadius: "50%",
+    bottom: "-100px",
+    right: "-100px",
+    filter: "blur(80px)",
+    opacity: 0.6,
   },
 
   card: {
@@ -254,6 +353,7 @@ const styles: any = {
     textAlign: "center",
     width: "320px",
     boxShadow: "0 10px 25px rgba(0,0,0,0.1)",
+    zIndex: 1,
   },
 
   title: {
@@ -326,6 +426,7 @@ const styles: any = {
     padding: "15px",
     borderRadius: "15px",
     boxShadow: "0 5px 15px rgba(0,0,0,0.08)",
+    zIndex: 1,
   },
 
   historyTitle: {
@@ -363,6 +464,7 @@ const styles: any = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
+    zIndex: 10,
   },
 
   modal: {
